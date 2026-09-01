@@ -13,6 +13,7 @@ import {
   Timer,
 } from "lucide-react";
 import { fetchSystemHealth, ServiceHealth } from "../../api/health";
+import { DatasetPanel } from "../dataset/DatasetPanel";
 
 const navItems = [
   { label: "대시보드", icon: LayoutDashboard, active: true },
@@ -23,9 +24,9 @@ const navItems = [
 ];
 
 const nextSteps = [
-  { number: "02", title: "샘플 데이터 모델", copy: "사용자·상품·주문 데이터를 두 방식으로 구성합니다." },
   { number: "03", title: "관계형 DB 실습", copy: "테이블과 행을 살펴보고 SQL을 직접 실행합니다." },
   { number: "04", title: "MongoDB 실습", copy: "문서 구조와 필터, 집계 파이프라인을 익힙니다." },
+  { number: "05", title: "구조 비교", copy: "같은 데이터를 두 구조로 나란히 놓고 차이를 짚어봅니다." },
 ];
 
 function formatTime(value?: string) {
@@ -101,10 +102,10 @@ export function Dashboard() {
         </nav>
         <div className="phase-card">
           <span className="phase-kicker">현재 단계</span>
-          <strong>Phase 01</strong>
-          <p>프로젝트 기반 구성</p>
-          <div className="phase-progress"><span /></div>
-          <small>1 / 7 단계</small>
+          <strong>Phase 02</strong>
+          <p>샘플 데이터 모델</p>
+          <div className="phase-progress"><span style={{ width: "28.4%" }} /></div>
+          <small>2 / 7 단계</small>
         </div>
         <div className="sidebar-foot">
           <span className="local-dot" /> localhost 전용
@@ -158,9 +159,11 @@ export function Dashboard() {
             <div>
               <p>Foundation ready</p>
               <h2>{allHealthy ? "실습 환경이 준비되었습니다." : "기반 구성이 완료되었습니다."}</h2>
-              <span>{allHealthy ? "두 데이터베이스가 응답하고 있습니다. 다음 단계에서 같은 데이터를 서로 다른 구조로 만나보세요." : "데이터베이스가 시작되면 상태가 자동으로 갱신됩니다. 15초마다 다시 확인합니다."}</span>
+              <span>{allHealthy ? "두 데이터베이스가 응답하고 있습니다. 아래에서 같은 데이터를 서로 다른 구조로 만나보세요." : "데이터베이스가 시작되면 상태가 자동으로 갱신됩니다. 15초마다 다시 확인합니다."}</span>
             </div>
           </section>
+
+          <DatasetPanel />
 
           <section className="roadmap" aria-labelledby="roadmap-title">
             <div className="section-title-row">
@@ -168,7 +171,7 @@ export function Dashboard() {
                 <p className="section-kicker">Coming next</p>
                 <h2 id="roadmap-title">다음 학습 단계</h2>
               </div>
-              <span className="scope-note">Phase 1 범위 밖</span>
+              <span className="scope-note">Phase 2 범위 밖</span>
             </div>
             <div className="roadmap-grid">
               {nextSteps.map((step) => (
@@ -182,7 +185,7 @@ export function Dashboard() {
             </div>
           </section>
         </div>
-        <footer><span>DB Playground · Local learning environment</span><span>Phase 01 / Foundation</span></footer>
+        <footer><span>DB Playground · Local learning environment</span><span>Phase 02 / Sample Data</span></footer>
       </main>
     </div>
   );

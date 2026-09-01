@@ -65,3 +65,11 @@ assembles + signs (ad hoc) the `.app` before creating the `.dmg`.
 - **Fixed ports** (8765 / 55432 / 57017, no negotiation). If something else
   on the machine already holds one of these, the app will fail to start;
   there's no conflict UI yet.
+- **No migration runner for existing installs.** The desktop app bootstraps a
+  brand-new PostgreSQL data directory with `Base.metadata.create_all()`
+  (see `docs/phase-2.md`), which only creates tables that don't exist yet --
+  it won't alter an existing table if a future schema change adds/renames a
+  column. A learner who already generated data on an older build and then
+  upgrades to a version with a changed schema would need to delete
+  `~/Library/Application Support/DBPlayground/postgres-data` (losing their
+  generated data) rather than getting an in-place migration.

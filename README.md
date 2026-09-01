@@ -1,6 +1,6 @@
 ﻿# DB Playground
 
-PostgreSQL과 MongoDB를 한 화면에서 비교하며 배우는 로컬 데이터베이스 실습 환경입니다. 현재 버전은 **Phase 1: 프로젝트 기반 구성**으로, 네 서비스의 실행과 데이터베이스 연결 상태 확인까지 제공합니다.
+PostgreSQL과 MongoDB를 한 화면에서 비교하며 배우는 로컬 데이터베이스 실습 환경입니다. 현재 버전은 **Phase 2: 샘플 데이터 모델**로, 네 서비스 실행과 연결 상태 확인(Phase 1)에 더해 온라인 쇼핑몰 예제 데이터를 두 데이터베이스에 서로 다른 방식으로 생성·초기화할 수 있습니다.
 
 ## 실행 방법 두 가지
 
@@ -69,8 +69,11 @@ python -m venv .venv
 # Windows: .venv\Scripts\activate
 # macOS/Linux: source .venv/bin/activate
 pip install -e ".[dev]"
+alembic upgrade head
 uvicorn app.main:app --reload
 ```
+
+`alembic upgrade head`는 PostgreSQL에 최신 스키마를 적용합니다. 완전히 새 데이터베이스라면 첫 `/api/dataset/generate` 호출 시 자동으로도 생성되지만, 이미 데이터가 있는 데이터베이스에 스키마 변경을 반영할 때는 항상 Alembic을 사용하세요. 스키마를 바꿀 때는 `alembic revision --autogenerate -m "설명"`으로 새 마이그레이션을 만듭니다.
 
 프론트엔드:
 
@@ -101,6 +104,16 @@ pnpm lint
 pnpm build
 ```
 
+## 샘플 데이터
+
+온라인 쇼핑몰 도메인(고객·상품·주문)을 두 데이터베이스에 서로 다른 방식으로 생성합니다. PostgreSQL은 `customers`/`products`/`orders`/`order_items` 테이블로 정규화되어 주문 내역을 조인으로 조회하고, MongoDB는 `orders` 문서 안에 상품 스냅샷이 포함된 `items` 배열을 그대로 내장합니다. 매번 동일한 시드로 생성되므로 다시 생성해도 같은 데이터가 만들어집니다.
+
+```bash
+curl -X POST http://localhost:8000/api/dataset/generate   # 고객 24 · 상품 18 · 주문 40건 생성
+curl http://localhost:8000/api/dataset/status              # 저장소별 현재 개수 확인
+curl -X POST http://localhost:8000/api/dataset/reset        # 두 저장소 모두 비우기
+```
+
 ## 환경 변수
 
 `.env.example`을 `.env`로 복사해 사용합니다. 실제 `.env` 파일은 Git에 포함되지 않습니다.
@@ -109,12 +122,12 @@ pnpm build
 
 ## 현재 범위와 다음 단계
 
-Phase 1에서는 다음 항목을 제공합니다.
+Phase 1 + Phase 2에서는 다음 항목을 제공합니다.
 
-- Docker Compose 기반 실행 환경
-- PostgreSQL 및 MongoDB 연결 상태 API
-- React 상태 대시보드
-- 기본 테스트와 개발 문서
+- Docker Compose 기반 실행 환경과 연결 상태 API (Phase 1)
 - Docker 없이 실습할 수 있는 독립형 macOS 앱(.dmg) 배포 경로
+- 온라인 쇼핑몰 샘플 데이터 모델(PostgreSQL 정규화 테이블 vs MongoDB 내장 문서)과 생성·초기화·현황 API
+- PostgreSQL 스키마를 위한 Alembic 마이그레이션
+- 백엔드·프론트엔드 테스트와 개발 문서
 
-데이터 모델, 마이그레이션, 샘플 데이터 생성 및 초기화 API는 Phase 2에서 추가합니다. 자세한 설계는 `docs/architecture.md`, 구현 범위는 `docs/phase-1.md`, 검증 결과는 `docs/validation.md`, macOS 앱 구조는 `docs/desktop-app.md`를 참고하세요.
+쿼리 콘솔, 데이터 조회/편집 UI, 스키마 다이어그램, 구조 비교 학습 콘텐츠, 트랜잭션·인덱스 실습은 이후 단계에서 추가합니다. 설계는 `docs/architecture.md`, Phase 1 구현 범위는 `docs/phase-1.md`, Phase 2 구현 범위는 `docs/phase-2.md`, 검증 결과는 `docs/validation.md`, macOS 앱 구조는 `docs/desktop-app.md`를 참고하세요.
