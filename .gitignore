@@ -1,11 +1,17 @@
 .env
 .venv/
+.build-venv/
 __pycache__/
 .pytest_cache/
 .ruff_cache/
 *.py[cod]
 node_modules/
 dist/
+build/
+.build/
+*.spec
+*.egg-info/
+backend/static/
 coverage/
 .DS_Store
 *.tsbuildinfo

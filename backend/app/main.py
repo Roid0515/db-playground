@@ -1,7 +1,11 @@
-from fastapi import FastAPI, Request
+import sys
+from pathlib import Path
+
+from fastapi import FastAPI, Request, Response
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
+from fastapi.responses import FileResponse, JSONResponse
+from fastapi.staticfiles import StaticFiles
 
 from app.api.health import router as health_router
 from app.config import get_settings
@@ -38,6 +42,32 @@ async def validation_exception_handler(
     )
 
 
+# Populated by the desktop build (frontend build copied next to the backend) so the
+# packaged app can serve the dashboard and the API from a single process and port.
+# A PyInstaller-frozen build has no real source tree, so `static/` is resolved next
+# to the frozen executable instead of relative to this module's file.
+if getattr(sys, "frozen", False):
+    STATIC_DIR = Path(sys.executable).resolve().parent / "static"
+else:
+    STATIC_DIR = Path(__file__).resolve().parent.parent / "static"
+_has_static = STATIC_DIR.is_dir()
+
+if _has_static:
+    app.mount("/assets", StaticFiles(directory=STATIC_DIR / "assets"), name="static-assets")
+
+
 @app.get("/")
-async def root() -> dict[str, str]:
-    return {"name": "DB Playground API", "docs": "/docs", "health": "/api/health"}
+async def root() -> Response:
+    if _has_static:
+        return FileResponse(STATIC_DIR / "index.html")
+    return JSONResponse({"name": "DB Playground API", "docs": "/docs", "health": "/api/health"})
+
+
+if _has_static:
+
+    @app.get("/{full_path:path}", include_in_schema=False)
+    async def serve_spa(full_path: str) -> FileResponse:
+        candidate = STATIC_DIR / full_path
+        if candidate.is_file():
+            return FileResponse(candidate)
+        return FileResponse(STATIC_DIR / "index.html")

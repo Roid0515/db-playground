@@ -2,6 +2,11 @@
 
 PostgreSQL과 MongoDB를 한 화면에서 비교하며 배우는 로컬 데이터베이스 실습 환경입니다. 현재 버전은 **Phase 1: 프로젝트 기반 구성**으로, 네 서비스의 실행과 데이터베이스 연결 상태 확인까지 제공합니다.
 
+## 실행 방법 두 가지
+
+- **개발용 (Docker Compose):** 아래 빠른 시작을 따르세요. 소스를 직접 수정하며 개발할 때 사용합니다.
+- **배포용 (macOS 앱):** Docker나 Homebrew 설치 없이 `DB Playground.app`을 더블클릭해서 바로 실습할 수 있습니다. 실제 PostgreSQL과 MongoDB가 앱 안에 내장되어 로컬에서 그대로 실행됩니다. 빌드 방법과 구조는 [`docs/desktop-app.md`](docs/desktop-app.md)를 참고하세요.
+
 ## 준비물
 
 - Docker Desktop 및 Docker Compose
@@ -110,5 +115,6 @@ Phase 1에서는 다음 항목을 제공합니다.
 - PostgreSQL 및 MongoDB 연결 상태 API
 - React 상태 대시보드
 - 기본 테스트와 개발 문서
+- Docker 없이 실습할 수 있는 독립형 macOS 앱(.dmg) 배포 경로
 
-데이터 모델, 마이그레이션, 샘플 데이터 생성 및 초기화 API는 Phase 2에서 추가합니다. 자세한 설계는 `docs/architecture.md`, 구현 범위는 `docs/phase-1.md`, 검증 결과는 `docs/validation.md`를 참고하세요.
+데이터 모델, 마이그레이션, 샘플 데이터 생성 및 초기화 API는 Phase 2에서 추가합니다. 자세한 설계는 `docs/architecture.md`, 구현 범위는 `docs/phase-1.md`, 검증 결과는 `docs/validation.md`, macOS 앱 구조는 `docs/desktop-app.md`를 참고하세요.
