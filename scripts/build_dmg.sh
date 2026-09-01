@@ -31,6 +31,7 @@ fail() { printf '\n\033[1;31mERROR:\033[0m %s\n' "$1" >&2; exit 1; }
 command -v dylibbundler >/dev/null || fail "dylibbundler not found. Run: brew install dylibbundler"
 command -v swift >/dev/null || fail "swift not found. Install Xcode command line tools."
 command -v node >/dev/null || fail "node not found."
+[ -f "$SWIFT_DIR/AppIcon.icns" ] || fail "AppIcon.icns not found. Run: python3 scripts/generate_app_icon.py"
 
 rm -rf "$DIST_DIR"
 mkdir -p "$DIST_DIR"
@@ -106,6 +107,7 @@ log "Assembling the .app bundle"
 mkdir -p "$APP_BUNDLE/Contents/MacOS" "$APP_BUNDLE/Contents/Resources"
 cp "$SWIFT_BIN_DIR/DBPlaygroundApp" "$APP_BUNDLE/Contents/MacOS/DBPlaygroundApp"
 cp -R "$BACKEND_DIST" "$APP_BUNDLE/Contents/Resources/backend"
+cp "$SWIFT_DIR/AppIcon.icns" "$APP_BUNDLE/Contents/Resources/AppIcon.icns"
 
 cat > "$APP_BUNDLE/Contents/Info.plist" <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>
@@ -118,6 +120,7 @@ cat > "$APP_BUNDLE/Contents/Info.plist" <<PLIST
     <key>CFBundleVersion</key><string>$APP_VERSION</string>
     <key>CFBundleShortVersionString</key><string>$APP_VERSION</string>
     <key>CFBundleExecutable</key><string>DBPlaygroundApp</string>
+    <key>CFBundleIconFile</key><string>AppIcon</string>
     <key>CFBundlePackageType</key><string>APPL</string>
     <key>LSMinimumSystemVersion</key><string>13.0</string>
     <key>NSHighResolutionCapable</key><true/>
