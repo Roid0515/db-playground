@@ -1,32 +1,14 @@
 import { useQuery } from "@tanstack/react-query";
-import {
-  ArrowUpRight,
-  BookOpen,
-  Boxes,
-  CircleCheck,
-  Database,
-  GitCompareArrows,
-  LayoutDashboard,
-  LockKeyhole,
-  RefreshCw,
-  Server,
-  Timer,
-} from "lucide-react";
+import { ArrowUpRight, CircleCheck, Database, LockKeyhole, RefreshCw, Server, Timer } from "lucide-react";
+import { Link } from "react-router-dom";
+import { Sidebar } from "../../components/Sidebar";
 import { fetchSystemHealth, ServiceHealth } from "../../api/health";
 import { DatasetPanel } from "../dataset/DatasetPanel";
 
-const navItems = [
-  { label: "대시보드", icon: LayoutDashboard, active: true },
-  { label: "관계형 DB", icon: Database },
-  { label: "MongoDB", icon: Boxes },
-  { label: "구조 비교", icon: GitCompareArrows },
-  { label: "학습 노트", icon: BookOpen },
-];
-
 const nextSteps = [
-  { number: "03", title: "관계형 DB 실습", copy: "테이블과 행을 살펴보고 SQL을 직접 실행합니다." },
   { number: "04", title: "MongoDB 실습", copy: "문서 구조와 필터, 집계 파이프라인을 익힙니다." },
   { number: "05", title: "구조 비교", copy: "같은 데이터를 두 구조로 나란히 놓고 차이를 짚어봅니다." },
+  { number: "06", title: "트랜잭션 · 인덱스", copy: "동시성과 조회 성능을 실습으로 이해합니다." },
 ];
 
 function formatTime(value?: string) {
@@ -85,32 +67,7 @@ export function Dashboard() {
 
   return (
     <div className="app-shell">
-      <aside className="sidebar">
-        <a className="brand" href="/" aria-label="DB Playground 홈">
-          <span className="brand-mark"><Database size={19} /></span>
-          <span><strong>DB</strong> Playground</span>
-        </a>
-        <nav aria-label="주요 메뉴">
-          <p className="nav-label">Workspace</p>
-          {navItems.map(({ label, icon: Icon, active }) => (
-            <button className={`nav-item ${active ? "active" : ""}`} key={label} disabled={!active} title={!active ? "다음 단계에서 제공됩니다" : undefined}>
-              <Icon size={18} strokeWidth={1.8} />
-              <span>{label}</span>
-              {!active && <LockKeyhole className="nav-lock" size={13} />}
-            </button>
-          ))}
-        </nav>
-        <div className="phase-card">
-          <span className="phase-kicker">현재 단계</span>
-          <strong>Phase 02</strong>
-          <p>샘플 데이터 모델</p>
-          <div className="phase-progress"><span style={{ width: "28.4%" }} /></div>
-          <small>2 / 7 단계</small>
-        </div>
-        <div className="sidebar-foot">
-          <span className="local-dot" /> localhost 전용
-        </div>
-      </aside>
+      <Sidebar activeLabel="대시보드" />
 
       <main>
         <header className="topbar">
@@ -165,13 +122,24 @@ export function Dashboard() {
 
           <DatasetPanel />
 
+          <section className="cta-panel">
+            <div>
+              <p className="section-kicker">Phase 03</p>
+              <h2>관계형 DB 실습</h2>
+              <span>방금 생성한 샘플 데이터를 테이블별로 살펴보고, SQL을 직접 실행해보세요.</span>
+            </div>
+            <Link className="cta-link" to="/relational">
+              테이블 탐색하기 <ArrowUpRight size={15} />
+            </Link>
+          </section>
+
           <section className="roadmap" aria-labelledby="roadmap-title">
             <div className="section-title-row">
               <div>
                 <p className="section-kicker">Coming next</p>
                 <h2 id="roadmap-title">다음 학습 단계</h2>
               </div>
-              <span className="scope-note">Phase 2 범위 밖</span>
+              <span className="scope-note">Phase 3 범위 밖</span>
             </div>
             <div className="roadmap-grid">
               {nextSteps.map((step) => (
@@ -185,7 +153,7 @@ export function Dashboard() {
             </div>
           </section>
         </div>
-        <footer><span>DB Playground · Local learning environment</span><span>Phase 02 / Sample Data</span></footer>
+        <footer><span>DB Playground · Local learning environment</span><span>Phase 03 / Relational Practice</span></footer>
       </main>
     </div>
   );

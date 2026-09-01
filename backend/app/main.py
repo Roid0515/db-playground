@@ -9,13 +9,14 @@ from fastapi.staticfiles import StaticFiles
 
 from app.api.dataset import router as dataset_router
 from app.api.health import router as health_router
+from app.api.postgres import router as postgres_router
 from app.config import get_settings
 
 settings = get_settings()
 app = FastAPI(
     title="DB Playground API",
     description="Local learning API for PostgreSQL and MongoDB",
-    version="0.2.0",
+    version="0.3.0",
 )
 app.add_middleware(
     CORSMiddleware,
@@ -26,6 +27,7 @@ app.add_middleware(
 )
 app.include_router(health_router)
 app.include_router(dataset_router)
+app.include_router(postgres_router)
 
 
 @app.exception_handler(RequestValidationError)

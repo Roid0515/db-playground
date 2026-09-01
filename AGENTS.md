@@ -1,17 +1,21 @@
 # DB Playground agent guide
 
 ## Purpose and structure
-DB Playground is a localhost-first learning environment for comparing PostgreSQL with MongoDB. The current implementation phase is **Phase 2: sample data model** (Phase 1's foundation plus a seeded e-commerce dataset in both stores).
+DB Playground is a localhost-first learning environment for comparing PostgreSQL with MongoDB. The current implementation phase is **Phase 3: relational DB practice** (Phase 1's foundation, Phase 2's seeded e-commerce dataset, plus PostgreSQL table/row browsing and a SQL console).
 
 - `backend/`: FastAPI, database adapters, API routes, pytest tests.
   - `app/models/`: SQLAlchemy ORM models for the PostgreSQL schema (customers, products, orders, order_items).
   - `app/services/dataset.py`: generates the same seeded dataset into both stores; owns the reset/status logic too.
+  - `app/services/sql_console.py`: table/row browsing and validated ad-hoc SQL execution against PostgreSQL. See `docs/phase-3.md` for the safety model before touching this.
   - `app/api/dataset.py`: `/api/dataset/{generate,reset,status}`.
+  - `app/api/postgres.py`: `/api/postgres/{tables,tables/{name}/rows,query}`.
   - `alembic/`: PostgreSQL schema migrations. `env.py` builds its engine from `app.config.Settings`, not a separate URL in `alembic.ini`.
   - `app/desktop/`: standalone-app runtime (boots real local Postgres/MongoDB
     child processes with no Docker; see `docs/desktop-app.md`). Docker-mode
     code paths must keep working unchanged when this module isn't used.
 - `frontend/`: React + TypeScript + Vite dashboard and Vitest tests.
+  - `src/components/Sidebar.tsx`: shared app-shell sidebar/nav, used by every page.
+  - `src/features/relational/`: the "관계형 DB" table browser + SQL console page.
 - `desktop/DBPlaygroundApp/`: SwiftUI macOS launcher app (Swift Package, no Xcode project).
 - `scripts/build_dmg.sh`: builds the standalone `.app`/`.dmg`.
 - `docs/`: architecture notes.
@@ -36,10 +40,11 @@ DB Playground is a localhost-first learning environment for comparing PostgreSQL
 - Validate inputs with Pydantic and never expose connection strings or credentials in errors.
 - Any PostgreSQL schema change needs a new Alembic revision (`alembic revision --autogenerate -m "..."`), reviewed and adjusted by hand -- don't rely on `Base.metadata.create_all()` alone for anything beyond bootstrapping a brand-new empty database.
 - A `sqlalchemy.Enum` column must pass `values_callable` to store the Python enum's `.value`, not its member name -- this repo's MongoDB side stores `.value` directly, so the two stores must agree on casing (see `app/models/order.py`).
+- Any raw, learner-submitted SQL must run via `Connection.exec_driver_sql()`, never `session.execute(text(raw_sql))` -- `text()` scans for `:name` bind-parameter syntax and misfires on legitimate SQL with literal colons. Keep it going through `app/services/sql_console.py`'s validation (single statement, no DDL) rather than adding a second raw-execution path.
 - Before completion, run tests, lint, build, `docker compose config`, and update docs.
 
 ## Scope
-Current phase: Phase 2. Do not add query consoles, row/document browsing or editing UI, schema diagrams, comparison-lesson content, transactions, indexes, authentication, cloud connections, or deployment features beyond the existing Docker/desktop paths.
+Current phase: Phase 3. Do not add MongoDB browsing/querying, schema diagrams, comparison-lesson content, transactions, indexes, authentication, cloud connections, or deployment features beyond the existing Docker/desktop paths.
 
 The standalone macOS app (`desktop/`, `app/desktop/`, `scripts/build_dmg.sh`) is
 a packaging/distribution path for whatever phase the Docker/dev path is on, not
