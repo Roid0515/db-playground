@@ -16,7 +16,7 @@ settings = get_settings()
 app = FastAPI(
     title="DB Playground API",
     description="Local learning API for PostgreSQL and MongoDB",
-    version="0.3.0",
+    version="1.1.0",
 )
 app.add_middleware(
     CORSMiddleware,
