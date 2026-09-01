@@ -84,7 +84,10 @@ jobs:
           version: 11
       - uses: actions/setup-node@v4
         with:
-          node-version: "20"
+          # pnpm 11 (pinned below) requires Node 22.13+; verified directly
+          # that Node 20 makes actions/setup-node@v4 itself crash trying to
+          # use pnpm for its own dependency cache.
+          node-version: "22"
           cache: pnpm
           cache-dependency-path: frontend/pnpm-lock.yaml
       - run: pnpm install --frozen-lockfile
