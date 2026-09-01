@@ -1,8 +1,13 @@
 """Starts and stops a local, unmanaged MongoDB server for the desktop app.
 
-MongoDB has no "trust" auth equivalent, so the root user is bootstrapped once
+MongoDB has no "trust" auth equivalent, so the app user is bootstrapped once
 against a temporary no-auth instance (mirroring what the official Docker image's
 entrypoint does), then every later launch starts mongod with --auth enforced.
+
+The bootstrapped user is scoped to readWrite+dbAdmin on the app's own database
+only -- never `root`. The SQL/query consoles this app offers are meant to let a
+learner experiment freely with their own practice data, not with server-wide
+MongoDB administration (other databases, user management, replication, ...).
 """
 
 from __future__ import annotations
@@ -47,10 +52,11 @@ def wait_ready(
     *,
     username: str | None = None,
     password: str | None = None,
+    auth_source: str | None = None,
     timeout: float = 30,
 ) -> None:
     if username and password:
-        uri = f"mongodb://{username}:{password}@{host}:{port}/?authSource=admin"
+        uri = f"mongodb://{username}:{password}@{host}:{port}/?authSource={auth_source}"
     else:
         uri = f"mongodb://{host}:{port}/"
     deadline = time.monotonic() + timeout
@@ -66,14 +72,23 @@ def wait_ready(
     raise MongoRuntimeError(f"MongoDB did not become ready in time: {last_error}")
 
 
-def bootstrap_root_user(host: str, port: int, username: str, password: str) -> None:
+def bootstrap_app_user(host: str, port: int, dbname: str, username: str, password: str) -> None:
+    """Create the app's MongoDB user, scoped to `dbname` only.
+
+    createUser is issued against `dbname` (not `admin`), so the resulting user
+    lives in `dbname`'s own user collection with no admin-database presence at
+    all -- there's no root/admin account for this app to ever misuse.
+    """
     uri = f"mongodb://{host}:{port}/"
     with MongoClient(uri, serverSelectionTimeoutMS=5000) as client:
-        client.admin.command(
+        client[dbname].command(
             "createUser",
             username,
             pwd=password,
-            roles=[{"role": "root", "db": "admin"}],
+            roles=[
+                {"role": "readWrite", "db": dbname},
+                {"role": "dbAdmin", "db": dbname},
+            ],
         )
 
 

@@ -1,3 +1,5 @@
+import { apiGet } from "./client";
+
 export type ServiceStatus = "healthy" | "unavailable";
 
 export interface ServiceHealth {
@@ -6,6 +8,7 @@ export interface ServiceHealth {
   latency_ms: number;
   checked_at: string;
   message: string;
+  version: string | null;
 }
 
 export interface SystemHealth {
@@ -16,10 +19,6 @@ export interface SystemHealth {
   };
 }
 
-const API_URL = import.meta.env.VITE_API_URL ?? "http://localhost:8000";
-
 export async function fetchSystemHealth(): Promise<SystemHealth> {
-  const response = await fetch(`${API_URL}/api/health`);
-  if (!response.ok) throw new Error("상태 정보를 불러오지 못했습니다.");
-  return response.json() as Promise<SystemHealth>;
+  return apiGet<SystemHealth>("/api/health");
 }

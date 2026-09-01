@@ -9,15 +9,20 @@ from sqlalchemy.orm import Session, sessionmaker
 from app.config import Settings, get_settings
 
 
-def ping_postgres(settings: Settings) -> None:
-    """Open a short-lived connection and verify the server responds."""
+def ping_postgres(settings: Settings) -> str:
+    """Open a short-lived connection, verify the server responds, and report
+    its real version -- this app runs against a Homebrew-built binary in the
+    desktop app and an Alpine Docker image in the Compose path, so a
+    hardcoded "16 · Alpine" label would be accurate for exactly one of them.
+    """
     with psycopg.connect(
         settings.postgres_dsn,
         connect_timeout=min(settings.query_timeout_seconds, 10),
     ) as connection:
         with connection.cursor() as cursor:
-            cursor.execute("SELECT 1")
-            cursor.fetchone()
+            cursor.execute("SHOW server_version")
+            (version,) = cursor.fetchone()
+            return version
 
 
 @lru_cache

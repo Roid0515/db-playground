@@ -1,3 +1,4 @@
+import Darwin
 import Foundation
 
 enum BackendStatus: Equatable {
@@ -11,10 +12,14 @@ final class BackendRuntime: ObservableObject {
     @Published private(set) var status: BackendStatus = .starting
 
     static let baseURL = URL(string: "http://127.0.0.1:8765")!
-    private static let healthURL = baseURL.appendingPathComponent("api/health")
+    // /api/health/ready (not /api/health) so a database that isn't up yet is a
+    // clear 503 instead of a 200-with-degraded-body that a status-code check
+    // can't tell apart from "fully ready".
+    private static let readyURL = baseURL.appendingPathComponent("api/health/ready")
 
     private var process: Process?
     private var pollTask: Task<Void, Never>?
+    private var isStoppingIntentionally = false
 
     func start() {
         guard process == nil else { return }
@@ -38,7 +43,15 @@ final class BackendRuntime: ObservableObject {
         process.standardError = logHandle
         process.terminationHandler = { [weak self] proc in
             Task { @MainActor in
-                guard let self, case .starting = self.status else { return }
+                guard let self, !self.isStoppingIntentionally else { return }
+                // Reachable from .starting (never came up) or .ready (crashed
+                // later) alike -- either way this is unexpected, not a normal
+                // app-quit shutdown, so the UI must not stay on a stale "ready"
+                // webview pointed at a backend that no longer exists. The crashed
+                // process's own postgres/mongod children never got the graceful
+                // shutdown its (never-reached) `finally` block would have given
+                // them, so clean up its whole process group as a safety net.
+                Self.killProcessGroup(of: proc.processIdentifier)
                 self.status = .failed(
                     "백엔드 프로세스가 예기치 않게 종료되었습니다 (코드 \(proc.terminationStatus)). "
                         + "로그: \(logURL.path)"
@@ -61,7 +74,7 @@ final class BackendRuntime: ObservableObject {
         let deadline = Date().addingTimeInterval(45)
         while Date() < deadline {
             if Task.isCancelled { return }
-            if let (_, response) = try? await URLSession.shared.data(from: Self.healthURL),
+            if let (_, response) = try? await URLSession.shared.data(from: Self.readyURL),
                 let http = response as? HTTPURLResponse, http.statusCode == 200
             {
                 status = .ready
@@ -75,10 +88,23 @@ final class BackendRuntime: ObservableObject {
     }
 
     func stop() {
+        isStoppingIntentionally = true
         pollTask?.cancel()
         guard let process, process.isRunning else { return }
         process.terminate()
         process.waitUntilExit()
+    }
+
+    /// `app.desktop.runtime.main()` calls `os.setpgrp()`, so this pid is also
+    /// its process group id -- postgres/mongod inherit that group, and it stays
+    /// addressable via kill(-pgid, ...) even after the leader itself has died.
+    /// SIGTERM first for a clean shutdown attempt, SIGKILL shortly after for
+    /// whatever ignores it.
+    private static func killProcessGroup(of pid: pid_t) {
+        Darwin.kill(-pid, SIGTERM)
+        DispatchQueue.global().asyncAfter(deadline: .now() + 2) {
+            Darwin.kill(-pid, SIGKILL)
+        }
     }
 
     private static func logFileURL() -> URL {

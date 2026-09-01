@@ -34,9 +34,13 @@ class Settings(BaseSettings):
 
     @property
     def mongodb_uri(self) -> str:
+        # authSource is the app's own database, not "admin": the app user is
+        # scoped to readWrite+dbAdmin on mongodb_database only (see
+        # app/desktop/mongodb_runtime.py) and was never created as a root user,
+        # so its credentials only exist in that database's own user collection.
         return (
             f"mongodb://{self.mongodb_username}:{self.mongodb_password}@"
-            f"{self.mongodb_host}:{self.mongodb_port}/?authSource=admin"
+            f"{self.mongodb_host}:{self.mongodb_port}/?authSource={self.mongodb_database}"
         )
 
 

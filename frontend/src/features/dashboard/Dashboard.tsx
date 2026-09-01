@@ -2,7 +2,15 @@ import { useQuery } from "@tanstack/react-query";
 import { ArrowUpRight, CircleCheck, Database, LockKeyhole, RefreshCw, Server, Timer } from "lucide-react";
 import { Link } from "react-router-dom";
 import { Sidebar } from "../../components/Sidebar";
+import { apiUrl } from "../../api/client";
 import { fetchSystemHealth, ServiceHealth } from "../../api/health";
+import { DB_META, DbType } from "../../config/dbMeta";
+import {
+  CURRENT_PHASE_TITLE,
+  PHASE_FOOTER_LABEL,
+  PHASE_LABEL,
+  PHASE_SCOPE_NOTE,
+} from "../../config/phase";
 import { DatasetPanel } from "../dataset/DatasetPanel";
 
 const nextSteps = [
@@ -20,16 +28,14 @@ function formatTime(value?: string) {
   }).format(new Date(value));
 }
 
-function StatusCard({ health, loading, type }: { health?: ServiceHealth; loading: boolean; type: "postgres" | "mongodb" }) {
+function StatusCard({ health, loading, type }: { health?: ServiceHealth; loading: boolean; type: DbType }) {
   const healthy = health?.status === "healthy";
-  const label = type === "postgres" ? "PostgreSQL" : "MongoDB";
-  const description = type === "postgres" ? "관계형 데이터베이스" : "문서형 데이터베이스";
-  const version = type === "postgres" ? "16 · Alpine" : "7 · Community";
+  const { label, kind: description, markLetters } = DB_META[type];
 
   return (
     <article className={`status-card ${type}`} aria-label={`${label} 연결 상태`}>
       <div className="card-topline">
-        <div className={`db-mark ${type}`} aria-hidden="true">{type === "postgres" ? "PG" : "MO"}</div>
+        <div className={`db-mark ${type}`} aria-hidden="true">{markLetters}</div>
         <span className={`status-chip ${healthy ? "healthy" : "offline"}`}>
           <span className="status-dot" />
           {loading ? "확인 중" : healthy ? "정상 연결" : "연결 안 됨"}
@@ -46,7 +52,7 @@ function StatusCard({ health, loading, type }: { health?: ServiceHealth; loading
         </div>
         <div>
           <dt><Server size={15} /> 버전</dt>
-          <dd>{version}</dd>
+          <dd>{health?.version ?? "—"}</dd>
         </div>
       </dl>
       <div className="card-foot">
@@ -73,7 +79,7 @@ export function Dashboard() {
         <header className="topbar">
           <div className="mobile-brand"><Database size={18} /> DB Playground</div>
           <div className="environment"><span /> Development</div>
-          <a href="http://localhost:8000/docs" target="_blank" rel="noreferrer">API 문서 <ArrowUpRight size={14} /></a>
+          <a href={apiUrl("/docs")} target="_blank" rel="noreferrer">API 문서 <ArrowUpRight size={14} /></a>
         </header>
 
         <div className="content">
@@ -124,8 +130,8 @@ export function Dashboard() {
 
           <section className="cta-panel">
             <div>
-              <p className="section-kicker">Phase 03</p>
-              <h2>관계형 DB 실습</h2>
+              <p className="section-kicker">{PHASE_LABEL}</p>
+              <h2>{CURRENT_PHASE_TITLE}</h2>
               <span>방금 생성한 샘플 데이터를 테이블별로 살펴보고, SQL을 직접 실행해보세요.</span>
             </div>
             <Link className="cta-link" to="/relational">
@@ -139,7 +145,7 @@ export function Dashboard() {
                 <p className="section-kicker">Coming next</p>
                 <h2 id="roadmap-title">다음 학습 단계</h2>
               </div>
-              <span className="scope-note">Phase 3 범위 밖</span>
+              <span className="scope-note">{PHASE_SCOPE_NOTE}</span>
             </div>
             <div className="roadmap-grid">
               {nextSteps.map((step) => (
@@ -153,7 +159,7 @@ export function Dashboard() {
             </div>
           </section>
         </div>
-        <footer><span>DB Playground · Local learning environment</span><span>Phase 03 / Relational Practice</span></footer>
+        <footer><span>DB Playground · Local learning environment</span><span>{PHASE_FOOTER_LABEL}</span></footer>
       </main>
     </div>
   );

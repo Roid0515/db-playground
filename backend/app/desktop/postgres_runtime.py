@@ -3,6 +3,13 @@
 Binds to 127.0.0.1 only and uses trust authentication: this process is a
 single-user local learning sandbox, not a multi-tenant server, so the usual
 password-auth threat model doesn't apply as long as nothing else can reach the port.
+
+Trust auth only decides who's allowed to *connect* -- it says nothing about
+what they can do once connected. That's why the app never runs as the initdb
+bootstrap role: it's a real Postgres superuser, so a bug (or a learner's SQL
+console query) could otherwise reach past the db_playground database into
+server-wide state. create_app_role/grant_database_privileges set up a
+NOSUPERUSER role scoped to just that one database instead.
 """
 
 from __future__ import annotations
@@ -90,24 +97,72 @@ def wait_ready(host: str, port: int, user: str, timeout: float = 30) -> None:
     raise PostgresRuntimeError(f"PostgreSQL did not become ready in time: {last_error}")
 
 
-def set_password(host: str, port: int, user: str, password: str) -> None:
-    # ALTER ROLE's PASSWORD clause is a string literal, not a bind parameter position,
-    # so the value must be inlined via sql.Literal rather than passed as a query param.
-    dsn = f"host={host} port={port} dbname={MAINTENANCE_DB} user={user}"
+def create_app_role(
+    host: str, port: int, bootstrap_user: str, app_user: str, app_password: str
+) -> None:
+    """Create (or reset the password of) a NOSUPERUSER app role.
+
+    The bootstrap role from initdb is a real Postgres superuser -- fine for our
+    own setup steps, but the SQL console lets a learner run arbitrary SELECT/
+    INSERT/UPDATE/DELETE, so the connection that actually serves the app must
+    not be able to do things like CREATE ROLE, ALTER SYSTEM, or read arbitrary
+    server-side files.
+    """
+    dsn = f"host={host} port={port} dbname={MAINTENANCE_DB} user={bootstrap_user}"
     with psycopg.connect(dsn, autocommit=True) as conn:
-        conn.execute(
-            sql.SQL("ALTER ROLE {} WITH PASSWORD {}").format(
-                sql.Identifier(user), sql.Literal(password)
+        exists = conn.execute("SELECT 1 FROM pg_roles WHERE rolname = %s", (app_user,)).fetchone()
+        privileges = "LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION"
+        if exists:
+            conn.execute(
+                sql.SQL("ALTER ROLE {} WITH " + privileges + " PASSWORD {}").format(
+                    sql.Identifier(app_user), sql.Literal(app_password)
+                )
             )
-        )
+        else:
+            conn.execute(
+                sql.SQL("CREATE ROLE {} WITH " + privileges + " PASSWORD {}").format(
+                    sql.Identifier(app_user), sql.Literal(app_password)
+                )
+            )
 
 
-def ensure_database(host: str, port: int, user: str, dbname: str) -> None:
-    dsn = f"host={host} port={port} dbname={MAINTENANCE_DB} user={user}"
+def ensure_database(host: str, port: int, bootstrap_user: str, dbname: str) -> None:
+    dsn = f"host={host} port={port} dbname={MAINTENANCE_DB} user={bootstrap_user}"
     with psycopg.connect(dsn, autocommit=True) as conn:
         exists = conn.execute("SELECT 1 FROM pg_database WHERE datname = %s", (dbname,)).fetchone()
         if not exists:
             conn.execute(sql.SQL("CREATE DATABASE {}").format(sql.Identifier(dbname)))
+
+
+def grant_database_privileges(
+    host: str, port: int, bootstrap_user: str, dbname: str, app_user: str
+) -> None:
+    """Give the unprivileged app role full DML/DDL rights, but only inside
+    `dbname` -- not database-creation or server-wide rights. Idempotent, so
+    it's safe to call on every startup rather than tracking first-run state.
+    """
+    maintenance_dsn = f"host={host} port={port} dbname={MAINTENANCE_DB} user={bootstrap_user}"
+    with psycopg.connect(maintenance_dsn, autocommit=True) as conn:
+        conn.execute(
+            sql.SQL("GRANT ALL PRIVILEGES ON DATABASE {} TO {}").format(
+                sql.Identifier(dbname), sql.Identifier(app_user)
+            )
+        )
+
+    # Schema-level grants must run against the target database itself.
+    db_dsn = f"host={host} port={port} dbname={dbname} user={bootstrap_user}"
+    with psycopg.connect(db_dsn, autocommit=True) as conn:
+        conn.execute(sql.SQL("GRANT ALL ON SCHEMA public TO {}").format(sql.Identifier(app_user)))
+        conn.execute(
+            sql.SQL("ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON TABLES TO {}").format(
+                sql.Identifier(app_user)
+            )
+        )
+        conn.execute(
+            sql.SQL(
+                "ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON SEQUENCES TO {}"
+            ).format(sql.Identifier(app_user))
+        )
 
 
 def stop(data_dir: Path) -> None:

@@ -4,14 +4,23 @@ import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 import { DatasetPanel } from "../features/dataset/DatasetPanel";
 
+function storeResult(customers: number, products: number, orders: number) {
+  return { status: "success", counts: { customers, products, orders }, message: null };
+}
+
 const emptyStatus = {
-  postgres: { customers: 0, products: 0, orders: 0 },
-  mongodb: { customers: 0, products: 0, orders: 0 },
+  postgres: storeResult(0, 0, 0),
+  mongodb: storeResult(0, 0, 0),
 };
 
 const seededStatus = {
-  postgres: { customers: 24, products: 18, orders: 40 },
-  mongodb: { customers: 24, products: 18, orders: 40 },
+  postgres: storeResult(24, 18, 40),
+  mongodb: storeResult(24, 18, 40),
+};
+
+const partialFailureStatus = {
+  postgres: storeResult(24, 18, 40),
+  mongodb: { status: "failed", counts: null, message: "MongoDB unavailable" },
 };
 
 function renderPanel() {
@@ -79,5 +88,17 @@ describe("DatasetPanel", () => {
     await userEvent.click(screen.getByRole("button", { name: /샘플 데이터 생성/ }));
 
     expect(await screen.findByRole("alert")).toHaveTextContent("샘플 데이터 생성에 실패했습니다.");
+  });
+
+  it("shows a partial-failure banner and message when only one store fails", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: true, json: async () => partialFailureStatus }));
+
+    renderPanel();
+
+    expect(await screen.findByRole("alert")).toHaveTextContent("MongoDB에 연결할 수 없어");
+    await waitFor(() => {
+      expect(screen.getByLabelText("PostgreSQL 데이터 현황")).toHaveTextContent("40");
+    });
+    expect(screen.getByLabelText("MongoDB 데이터 현황")).toHaveTextContent("MongoDB unavailable");
   });
 });

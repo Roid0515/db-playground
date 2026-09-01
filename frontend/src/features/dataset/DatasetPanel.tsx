@@ -1,34 +1,50 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Sparkles, Trash2 } from "lucide-react";
-import { DatasetStatus, StoreCounts, fetchDatasetStatus, generateDataset, resetDataset } from "../../api/dataset";
+import { DatasetStatus, StoreResult, fetchDatasetStatus, generateDataset, resetDataset } from "../../api/dataset";
+import { DB_META, DbType } from "../../config/dbMeta";
 
-function StoreCountCard({ type, counts }: { type: "postgres" | "mongodb"; counts?: StoreCounts }) {
-  const label = type === "postgres" ? "PostgreSQL" : "MongoDB";
-  const description = type === "postgres" ? "정규화 테이블 + 조인" : "주문에 상품 스냅샷 내장";
+function StoreCountCard({ type, result }: { type: DbType; result?: StoreResult }) {
+  const { label, markLetters, modelNote } = DB_META[type];
+  const failed = result?.status === "failed";
 
   return (
-    <article className={`dataset-card ${type}`} aria-label={`${label} 데이터 현황`}>
+    <article className={`dataset-card ${type} ${failed ? "failed" : ""}`} aria-label={`${label} 데이터 현황`}>
       <div className="card-topline">
-        <div className={`db-mark ${type}`} aria-hidden="true">{type === "postgres" ? "PG" : "MO"}</div>
-        <span className="dataset-model">{description}</span>
+        <div className={`db-mark ${type}`} aria-hidden="true">
+          {markLetters}
+        </div>
+        <span className="dataset-model">{modelNote}</span>
       </div>
       <h3>{label}</h3>
-      <dl className="dataset-counts">
-        <div>
-          <dt>고객</dt>
-          <dd>{counts?.customers ?? "—"}</dd>
-        </div>
-        <div>
-          <dt>상품</dt>
-          <dd>{counts?.products ?? "—"}</dd>
-        </div>
-        <div>
-          <dt>주문</dt>
-          <dd>{counts?.orders ?? "—"}</dd>
-        </div>
-      </dl>
+      {failed ? (
+        <p className="dataset-error">{result?.message ?? "연결할 수 없습니다."}</p>
+      ) : (
+        <dl className="dataset-counts">
+          <div>
+            <dt>고객</dt>
+            <dd>{result?.counts?.customers ?? "—"}</dd>
+          </div>
+          <div>
+            <dt>상품</dt>
+            <dd>{result?.counts?.products ?? "—"}</dd>
+          </div>
+          <div>
+            <dt>주문</dt>
+            <dd>{result?.counts?.orders ?? "—"}</dd>
+          </div>
+        </dl>
+      )}
     </article>
   );
+}
+
+function partialFailureMessage(status?: DatasetStatus): string | undefined {
+  if (!status) return undefined;
+  const failedLabels = (["postgres", "mongodb"] as const)
+    .filter((store) => status[store].status === "failed")
+    .map((store) => (store === "postgres" ? "PostgreSQL" : "MongoDB"));
+  if (failedLabels.length === 0) return undefined;
+  return `${failedLabels.join(", ")}에 연결할 수 없어 해당 저장소는 처리되지 않았습니다.`;
 }
 
 export function DatasetPanel() {
@@ -40,13 +56,14 @@ export function DatasetPanel() {
   const resetMutation = useMutation({ mutationFn: resetDataset, onSuccess: applyResult });
 
   const isBusy = generateMutation.isPending || resetMutation.isPending;
-  const errorMessage = generateMutation.isError
+  const requestErrorMessage = generateMutation.isError
     ? "샘플 데이터 생성에 실패했습니다."
     : resetMutation.isError
       ? "초기화에 실패했습니다."
       : statusQuery.isError
         ? "데이터 현황을 불러오지 못했습니다."
         : undefined;
+  const errorMessage = requestErrorMessage ?? partialFailureMessage(statusQuery.data);
 
   return (
     <section className="dataset-section" aria-labelledby="dataset-title">
@@ -77,8 +94,8 @@ export function DatasetPanel() {
       </p>
 
       <div className="dataset-grid">
-        <StoreCountCard type="postgres" counts={statusQuery.data?.postgres} />
-        <StoreCountCard type="mongodb" counts={statusQuery.data?.mongodb} />
+        <StoreCountCard type="postgres" result={statusQuery.data?.postgres} />
+        <StoreCountCard type="mongodb" result={statusQuery.data?.mongodb} />
       </div>
     </section>
   );

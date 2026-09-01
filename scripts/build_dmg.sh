@@ -57,6 +57,7 @@ log "Freezing backend with PyInstaller"
 rm -rf build dist
 pyinstaller --name db-playground-backend --onedir --noconfirm \
   --collect-all uvicorn --collect-all psycopg --collect-submodules pymongo \
+  --collect-all alembic \
   desktop_entry.py
 
 BACKEND_DIST="$BACKEND_DIR/dist/db-playground-backend"
@@ -65,6 +66,15 @@ BACKEND_DIST="$BACKEND_DIR/dist/db-playground-backend"
 # app.main resolves STATIC_DIR relative to sys.executable when frozen, so the
 # frontend build must sit directly next to the frozen executable, not under _internal.
 cp -R "$BACKEND_DIR/static" "$BACKEND_DIST/static"
+
+# app.desktop.migrations resolves alembic.ini/alembic/ the same way, under
+# "migrations/" -- Alembic's ScriptDirectory reads versions/*.py off disk, so
+# these need to be real files next to the executable, not just importable
+# from the frozen PYZ archive.
+mkdir -p "$BACKEND_DIST/migrations"
+cp "$BACKEND_DIR/alembic.ini" "$BACKEND_DIST/migrations/"
+cp -R "$BACKEND_DIR/alembic" "$BACKEND_DIST/migrations/alembic"
+find "$BACKEND_DIST/migrations" -name "__pycache__" -type d -prune -exec rm -rf {} +
 
 log "Bundling self-contained PostgreSQL + MongoDB binaries (no Homebrew needed at runtime)"
 DB_BIN="$BACKEND_DIST/db-bin"

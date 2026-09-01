@@ -1,5 +1,11 @@
 import { BookOpen, Boxes, Database, GitCompareArrows, LayoutDashboard, LockKeyhole } from "lucide-react";
 import { Link } from "react-router-dom";
+import {
+  CURRENT_PHASE_TITLE,
+  PHASE_LABEL,
+  PHASE_PROGRESS_LABEL,
+  PHASE_PROGRESS_PERCENT,
+} from "../config/phase";
 
 interface NavItem {
   label: string;
@@ -49,12 +55,12 @@ export function Sidebar({ activeLabel }: { activeLabel: string }) {
       </nav>
       <div className="phase-card">
         <span className="phase-kicker">현재 단계</span>
-        <strong>Phase 03</strong>
-        <p>관계형 DB 실습</p>
+        <strong>{PHASE_LABEL}</strong>
+        <p>{CURRENT_PHASE_TITLE}</p>
         <div className="phase-progress">
-          <span style={{ width: "42.8%" }} />
+          <span style={{ width: `${PHASE_PROGRESS_PERCENT}%` }} />
         </div>
-        <small>3 / 7 단계</small>
+        <small>{PHASE_PROGRESS_LABEL}</small>
       </div>
       <div className="sidebar-foot">
         <span className="local-dot" /> localhost 전용

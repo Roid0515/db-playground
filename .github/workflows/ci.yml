@@ -1,0 +1,140 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  backend:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_DB: db_playground
+          POSTGRES_USER: db_playground
+          POSTGRES_PASSWORD: ci-password
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U db_playground"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+      mongodb:
+        # No auth env here on purpose: the bootstrap step below creates a
+        # scoped app user itself (mirroring app/desktop/mongodb_runtime.py's
+        # real bootstrap flow), since GitHub Actions service containers can't
+        # run our custom docker/mongo-init/*.js the way docker-compose does.
+        image: mongo:7
+        ports: ["27017:27017"]
+        options: >-
+          --health-cmd "mongosh --quiet --eval 'db.adminCommand(\"ping\").ok'"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    defaults:
+      run:
+        working-directory: backend
+    env:
+      # The postgres service container has no bootstrap/app-role split either
+      # -- fine for exercising the app's own logic, but privilege separation
+      # itself is regression-tested for real in the docker-compose-smoke-test
+      # job below, against our actual init scripts.
+      POSTGRES_HOST: localhost
+      POSTGRES_PORT: 5432
+      POSTGRES_DB: db_playground
+      POSTGRES_USER: db_playground
+      POSTGRES_PASSWORD: ci-password
+      MONGODB_HOST: localhost
+      MONGODB_PORT: 27017
+      MONGODB_DATABASE: db_playground
+      MONGODB_USERNAME: db_playground
+      MONGODB_PASSWORD: ci-password
+      FRONTEND_ORIGIN: http://localhost:5173
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: backend/pyproject.toml
+      - run: pip install -e ".[dev]"
+      - run: ruff check .
+      - run: ruff format --check .
+      - name: Bootstrap the MongoDB app user (service container starts with no auth)
+        run: |
+          python -c "
+          from app.desktop.mongodb_runtime import bootstrap_app_user
+          bootstrap_app_user('localhost', 27017, 'db_playground', 'db_playground', 'ci-password')
+          "
+      - name: Apply migrations against the service container
+        run: alembic upgrade head
+      - run: pytest -q
+
+  frontend:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: pnpm
+          cache-dependency-path: frontend/pnpm-lock.yaml
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm test --run
+      - run: pnpm lint
+      - run: pnpm build
+
+  docker-compose-smoke-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Write .env for docker compose
+        run: |
+          cat > .env <<EOF
+          POSTGRES_DB=db_playground
+          POSTGRES_USER=db_playground
+          POSTGRES_PASSWORD=ci-app-password
+          POSTGRES_ADMIN_PASSWORD=ci-admin-password
+          MONGODB_DATABASE=db_playground
+          MONGODB_USERNAME=db_playground
+          MONGODB_PASSWORD=ci-app-password
+          MONGODB_ADMIN_PASSWORD=ci-admin-password
+          FRONTEND_ORIGIN=http://localhost:5173
+          VITE_API_URL=http://localhost:8000
+          EOF
+      - run: docker compose up -d --build
+      - name: Wait for the backend to report ready
+        run: |
+          for i in $(seq 1 30); do
+            if curl -fs http://localhost:8000/api/health/ready; then exit 0; fi
+            sleep 2
+          done
+          echo "backend never became ready"
+          docker compose logs
+          exit 1
+      - name: Generate the sample dataset and check both stores succeeded
+        run: |
+          curl -fsS -X POST http://localhost:8000/api/dataset/generate | tee /tmp/generate.json
+          grep -q '"postgres":{"status":"success","counts":{"customers":24' /tmp/generate.json
+          grep -q '"mongodb":{"status":"success","counts":{"customers":24' /tmp/generate.json
+      - name: Regression-check PostgreSQL app role is not a superuser
+        run: |
+          result=$(docker compose exec -T postgres psql -U db_playground -d db_playground -tA -c \
+            "SELECT usesuper FROM pg_user WHERE usename = current_user;")
+          [ "$result" = "f" ]
+      - name: Regression-check the SQL console still rejects DDL
+        run: |
+          curl -fsS -X POST http://localhost:8000/api/postgres/query \
+            -H "Content-Type: application/json" \
+            -d '{"sql": "DROP TABLE customers"}' -o /tmp/ddl-response.json -w "%{http_code}" | grep -q 400
+          grep -q "Alembic" /tmp/ddl-response.json
+      - if: always()
+        run: docker compose logs
+      - if: always()
+        run: docker compose down -v

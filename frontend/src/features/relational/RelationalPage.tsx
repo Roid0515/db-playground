@@ -2,7 +2,9 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ArrowUpRight, Database, Play, TableProperties, Terminal } from "lucide-react";
 import { useEffect, useState } from "react";
 import { Sidebar } from "../../components/Sidebar";
-import { ApiError, QueryResult, fetchTableRows, fetchTables, runQuery } from "../../api/postgres";
+import { ApiError, apiUrl } from "../../api/client";
+import { QueryResult, fetchTableRows, fetchTables, runQuery } from "../../api/postgres";
+import { PHASE_FOOTER_LABEL } from "../../config/phase";
 
 const PAGE_SIZE = 20;
 
@@ -183,7 +185,7 @@ export function RelationalPage() {
           <div className="environment">
             <span /> Development
           </div>
-          <a href="http://localhost:8000/docs" target="_blank" rel="noreferrer">
+          <a href={apiUrl("/docs")} target="_blank" rel="noreferrer">
             API 문서 <ArrowUpRight size={14} />
           </a>
         </header>
@@ -256,7 +258,7 @@ export function RelationalPage() {
         </div>
         <footer>
           <span>DB Playground · Local learning environment</span>
-          <span>Phase 03 / Relational Practice</span>
+          <span>{PHASE_FOOTER_LABEL}</span>
         </footer>
       </main>
     </div>

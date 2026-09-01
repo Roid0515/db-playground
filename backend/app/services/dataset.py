@@ -9,7 +9,9 @@ dataset rather than piling up random rows across repeated calls.
 
 from __future__ import annotations
 
+import logging
 import random
+from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Any
@@ -18,13 +20,17 @@ from faker import Faker
 from sqlalchemy import delete, func, select
 
 from app.db.mongodb import get_database
-from app.db.postgres import get_engine, session_scope
-from app.models import Base, Customer, Order, OrderItem, OrderStatus, Product
+from app.db.postgres import session_scope
+from app.models import Customer, Order, OrderItem, OrderStatus, Product
+
+LOG = logging.getLogger("db_playground.dataset")
 
 SEED = 20260101
 CUSTOMER_COUNT = 24
 PRODUCT_COUNT = 18
 ORDER_COUNT = 40
+
+_STORE_LABELS = {"postgres": "PostgreSQL", "mongodb": "MongoDB"}
 
 
 @dataclass(frozen=True)
@@ -32,6 +38,37 @@ class StoreCounts:
     customers: int
     products: int
     orders: int
+
+
+@dataclass(frozen=True)
+class StoreResult:
+    """Outcome of one store's half of a generate/reset/status operation.
+
+    PostgreSQL and MongoDB fail independently in this app (unrelated
+    processes, unrelated failure modes), so a request touching both must
+    report each one's outcome separately rather than collapsing into a single
+    500 the moment either store has a bad day -- a learner practicing against
+    Postgres shouldn't be blocked by Mongo being down, and vice versa.
+    """
+
+    status: str  # "success" | "failed"
+    counts: StoreCounts | None = None
+    message: str | None = None
+
+
+def _run_independently(
+    operations: dict[str, Callable[[], StoreCounts]],
+) -> dict[str, StoreResult]:
+    results: dict[str, StoreResult] = {}
+    for name, operation in operations.items():
+        try:
+            results[name] = StoreResult(status="success", counts=operation())
+        except Exception:
+            LOG.exception("%s operation failed", _STORE_LABELS[name])
+            results[name] = StoreResult(
+                status="failed", message=f"{_STORE_LABELS[name]} unavailable"
+            )
+    return results
 
 
 def _build_customer_rows(fake: Faker) -> list[dict[str, Any]]:
@@ -146,9 +183,33 @@ def _seed_mongodb(
     db.orders.insert_many(order_docs)
 
 
-def generate_dataset() -> StoreCounts:
-    Base.metadata.create_all(get_engine())
+def _generated_counts() -> StoreCounts:
+    return StoreCounts(customers=CUSTOMER_COUNT, products=PRODUCT_COUNT, orders=ORDER_COUNT)
 
+
+def _empty_counts() -> StoreCounts:
+    return StoreCounts(customers=0, products=0, orders=0)
+
+
+def _postgres_status() -> StoreCounts:
+    with session_scope() as session:
+        return StoreCounts(
+            customers=session.scalar(select(func.count()).select_from(Customer)) or 0,
+            products=session.scalar(select(func.count()).select_from(Product)) or 0,
+            orders=session.scalar(select(func.count()).select_from(Order)) or 0,
+        )
+
+
+def _mongodb_status() -> StoreCounts:
+    db = get_database()
+    return StoreCounts(
+        customers=db.customers.count_documents({}),
+        products=db.products.count_documents({}),
+        orders=db.orders.count_documents({}),
+    )
+
+
+def generate_dataset() -> dict[str, StoreResult]:
     Faker.seed(SEED)
     random.seed(SEED)
     fake = Faker()
@@ -157,36 +218,32 @@ def generate_dataset() -> StoreCounts:
     product_rows = _build_product_rows(fake)
     order_specs = _build_order_specs(product_rows)
 
-    _seed_postgres(customer_rows, product_rows, order_specs)
-    _seed_mongodb(customer_rows, product_rows, order_specs)
+    def generate_postgres() -> StoreCounts:
+        _seed_postgres(customer_rows, product_rows, order_specs)
+        return _generated_counts()
 
-    return StoreCounts(customers=CUSTOMER_COUNT, products=PRODUCT_COUNT, orders=ORDER_COUNT)
+    def generate_mongodb() -> StoreCounts:
+        _seed_mongodb(customer_rows, product_rows, order_specs)
+        return _generated_counts()
 
-
-def reset_dataset() -> None:
-    Base.metadata.create_all(get_engine())
-    with session_scope() as session:
-        _clear_postgres(session)
-
-    db = get_database()
-    db.customers.delete_many({})
-    db.products.delete_many({})
-    db.orders.delete_many({})
+    return _run_independently({"postgres": generate_postgres, "mongodb": generate_mongodb})
 
 
-def dataset_status() -> dict[str, StoreCounts]:
-    Base.metadata.create_all(get_engine())
-    with session_scope() as session:
-        postgres_counts = StoreCounts(
-            customers=session.scalar(select(func.count()).select_from(Customer)) or 0,
-            products=session.scalar(select(func.count()).select_from(Product)) or 0,
-            orders=session.scalar(select(func.count()).select_from(Order)) or 0,
-        )
+def reset_dataset() -> dict[str, StoreResult]:
+    def reset_postgres() -> StoreCounts:
+        with session_scope() as session:
+            _clear_postgres(session)
+        return _empty_counts()
 
-    db = get_database()
-    mongodb_counts = StoreCounts(
-        customers=db.customers.count_documents({}),
-        products=db.products.count_documents({}),
-        orders=db.orders.count_documents({}),
-    )
-    return {"postgres": postgres_counts, "mongodb": mongodb_counts}
+    def reset_mongodb() -> StoreCounts:
+        db = get_database()
+        db.customers.delete_many({})
+        db.products.delete_many({})
+        db.orders.delete_many({})
+        return _empty_counts()
+
+    return _run_independently({"postgres": reset_postgres, "mongodb": reset_mongodb})
+
+
+def dataset_status() -> dict[str, StoreResult]:
+    return _run_independently({"postgres": _postgres_status, "mongodb": _mongodb_status})

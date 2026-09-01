@@ -14,6 +14,7 @@ const healthyResponse = {
       latency_ms: 4.2,
       checked_at: "2026-08-06T10:00:00Z",
       message: "Connection established",
+      version: "16.15 (Homebrew)",
     },
     mongodb: {
       service: "MongoDB",
@@ -21,13 +22,14 @@ const healthyResponse = {
       latency_ms: 5.1,
       checked_at: "2026-08-06T10:00:00Z",
       message: "Connection established",
+      version: "7.0.39",
     },
   },
 };
 
 const datasetResponse = {
-  postgres: { customers: 24, products: 18, orders: 40 },
-  mongodb: { customers: 24, products: 18, orders: 40 },
+  postgres: { status: "success", counts: { customers: 24, products: 18, orders: 40 }, message: null },
+  mongodb: { status: "success", counts: { customers: 24, products: 18, orders: 40 }, message: null },
 };
 
 function renderDashboard() {
@@ -52,11 +54,13 @@ describe("Dashboard", () => {
     );
   });
 
-  it("shows both database connection states", async () => {
+  it("shows both database connection states with their real reported version", async () => {
     renderDashboard();
     expect(await screen.findByText("모든 시스템 정상")).toBeInTheDocument();
     expect(screen.getByLabelText("PostgreSQL 연결 상태")).toHaveTextContent("4.2 ms");
+    expect(screen.getByLabelText("PostgreSQL 연결 상태")).toHaveTextContent("16.15 (Homebrew)");
     expect(screen.getByLabelText("MongoDB 연결 상태")).toHaveTextContent("5.1 ms");
+    expect(screen.getByLabelText("MongoDB 연결 상태")).toHaveTextContent("7.0.39");
   });
 
   it("shows the sample dataset panel with per-store counts", async () => {

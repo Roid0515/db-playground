@@ -51,9 +51,9 @@ async def validation_exception_handler(
 # A PyInstaller-frozen build has no real source tree, so `static/` is resolved next
 # to the frozen executable instead of relative to this module's file.
 if getattr(sys, "frozen", False):
-    STATIC_DIR = Path(sys.executable).resolve().parent / "static"
+    STATIC_DIR = (Path(sys.executable).resolve().parent / "static").resolve()
 else:
-    STATIC_DIR = Path(__file__).resolve().parent.parent / "static"
+    STATIC_DIR = (Path(__file__).resolve().parent.parent / "static").resolve()
 _has_static = STATIC_DIR.is_dir()
 
 if _has_static:
@@ -71,7 +71,13 @@ if _has_static:
 
     @app.get("/{full_path:path}", include_in_schema=False)
     async def serve_spa(full_path: str) -> FileResponse:
-        candidate = STATIC_DIR / full_path
-        if candidate.is_file():
+        # full_path comes straight from the URL and may contain literal ".."
+        # segments (encoded or not) that Starlette's routing doesn't strip.
+        # resolve() collapses them, then is_relative_to() confirms the result
+        # is still inside STATIC_DIR before it's ever handed to FileResponse --
+        # otherwise a request for e.g. /../../../../etc/passwd would happily
+        # serve any file readable by the process.
+        candidate = (STATIC_DIR / full_path).resolve()
+        if candidate.is_relative_to(STATIC_DIR) and candidate.is_file():
             return FileResponse(candidate)
         return FileResponse(STATIC_DIR / "index.html")

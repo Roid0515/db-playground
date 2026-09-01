@@ -1,3 +1,5 @@
+import { apiGet, apiPost } from "./client";
+
 export interface ColumnInfo {
   name: string;
   type: string;
@@ -26,21 +28,8 @@ export interface QueryResult {
   statement_type: string;
 }
 
-export class ApiError extends Error {}
-
-const API_URL = import.meta.env.VITE_API_URL ?? "http://localhost:8000";
-
-async function parseOrThrow<T>(response: Response): Promise<T> {
-  if (!response.ok) {
-    const body = await response.json().catch(() => null);
-    throw new ApiError(body?.detail ?? "요청을 처리하지 못했습니다.");
-  }
-  return response.json() as Promise<T>;
-}
-
 export async function fetchTables(): Promise<TableInfo[]> {
-  const response = await fetch(`${API_URL}/api/postgres/tables`);
-  return parseOrThrow(response);
+  return apiGet<TableInfo[]>("/api/postgres/tables");
 }
 
 export async function fetchTableRows(
@@ -48,16 +37,12 @@ export async function fetchTableRows(
   page: number,
   pageSize: number,
 ): Promise<TableRows> {
-  const params = new URLSearchParams({ page: String(page), page_size: String(pageSize) });
-  const response = await fetch(`${API_URL}/api/postgres/tables/${encodeURIComponent(tableName)}/rows?${params}`);
-  return parseOrThrow(response);
+  return apiGet<TableRows>(`/api/postgres/tables/${encodeURIComponent(tableName)}/rows`, {
+    page,
+    page_size: pageSize,
+  });
 }
 
 export async function runQuery(sql: string): Promise<QueryResult> {
-  const response = await fetch(`${API_URL}/api/postgres/query`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ sql }),
-  });
-  return parseOrThrow(response);
+  return apiPost<QueryResult>("/api/postgres/query", { sql });
 }

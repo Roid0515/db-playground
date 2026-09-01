@@ -21,6 +21,7 @@ This is a local, single-user learning sandbox, not a multi-tenant server -- the 
 - **A query timeout and a row cap**, both driven by the existing `QUERY_TIMEOUT_SECONDS` / `QUERY_MAX_ROWS` settings from Phase 1 (until now unused).
 - **Raw execution, not templated.** The learner's SQL runs via `Connection.exec_driver_sql()`, not `session.execute(text(...))`. SQLAlchemy's `text()` scans the string for `:name`-style bind parameters, which misfires on legitimate SQL containing literal colons (time literals, JSON paths, `::` casts written with extra spacing); `exec_driver_sql` sends the string to the driver verbatim.
 - **Errors are shown, not hidden.** Unlike the Phase 1 health checks (which deliberately hide driver errors), a failed query's actual database error is what tells the learner what went wrong, so it's surfaced -- lightly sanitized in case a `password=` substring ever ended up in a message.
+- **A second, independent layer at the database level.** The app connects as a `NOSUPERUSER` PostgreSQL role scoped to just the `db_playground` database (see `docs/architecture.md`'s "Decisions (Hardening)"), so even a bug in the statement-type validation above couldn't reach past that database into server-wide state.
 
 ## Learning-flow decisions
 

@@ -8,6 +8,12 @@ from app.services import dataset as dataset_service
 
 router = APIRouter(prefix="/api/dataset", tags=["dataset"])
 
+# Concurrent generate/reset requests would otherwise interleave (generation
+# reseeds the shared random/Faker state, and both operations delete-then-write
+# each store). A single-process asyncio.Lock is enough here -- this app never
+# runs more than one backend process, so there's no need for a distributed lock.
+_mutation_lock = asyncio.Lock()
+
 
 class StoreCounts(BaseModel):
     customers: int
@@ -15,33 +21,43 @@ class StoreCounts(BaseModel):
     orders: int
 
 
+class StoreResult(BaseModel):
+    status: str
+    counts: StoreCounts | None = None
+    message: str | None = None
+
+
 class DatasetStatus(BaseModel):
-    postgres: StoreCounts
-    mongodb: StoreCounts
+    postgres: StoreResult
+    mongodb: StoreResult
 
 
-def _to_status(counts: dict[str, dataset_service.StoreCounts]) -> DatasetStatus:
-    return DatasetStatus(
-        postgres=StoreCounts(**asdict(counts["postgres"])),
-        mongodb=StoreCounts(**asdict(counts["mongodb"])),
-    )
+def _to_status(results: dict[str, dataset_service.StoreResult]) -> DatasetStatus:
+    def convert(result: dataset_service.StoreResult) -> StoreResult:
+        return StoreResult(
+            status=result.status,
+            counts=StoreCounts(**asdict(result.counts)) if result.counts else None,
+            message=result.message,
+        )
+
+    return DatasetStatus(postgres=convert(results["postgres"]), mongodb=convert(results["mongodb"]))
 
 
 @router.get("/status", response_model=DatasetStatus)
 async def get_dataset_status() -> DatasetStatus:
-    counts = await asyncio.to_thread(dataset_service.dataset_status)
-    return _to_status(counts)
+    results = await asyncio.to_thread(dataset_service.dataset_status)
+    return _to_status(results)
 
 
 @router.post("/generate", response_model=DatasetStatus)
 async def generate_dataset() -> DatasetStatus:
-    await asyncio.to_thread(dataset_service.generate_dataset)
-    counts = await asyncio.to_thread(dataset_service.dataset_status)
-    return _to_status(counts)
+    async with _mutation_lock:
+        results = await asyncio.to_thread(dataset_service.generate_dataset)
+    return _to_status(results)
 
 
 @router.post("/reset", response_model=DatasetStatus)
 async def reset_dataset() -> DatasetStatus:
-    await asyncio.to_thread(dataset_service.reset_dataset)
-    counts = await asyncio.to_thread(dataset_service.dataset_status)
-    return _to_status(counts)
+    async with _mutation_lock:
+        results = await asyncio.to_thread(dataset_service.reset_dataset)
+    return _to_status(results)
