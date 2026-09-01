@@ -7,13 +7,9 @@ import {
   LockKeyhole,
   Zap,
 } from "lucide-react";
+import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
-import {
-  CURRENT_PHASE_TITLE,
-  PHASE_LABEL,
-  PHASE_PROGRESS_LABEL,
-  PHASE_PROGRESS_PERCENT,
-} from "../config/phase";
+import { LEARNING_STEPS, getVisitedSteps, markStepVisited } from "../lib/learningProgress";
 
 interface NavItem {
   label: string;
@@ -31,6 +27,28 @@ const navItems: NavItem[] = [
 ];
 
 export function Sidebar({ activeLabel }: { activeLabel: string }) {
+  const activeStep = LEARNING_STEPS.find((step) => step.label === activeLabel);
+  const [visited, setVisited] = useState<Set<string>>(() => getVisitedSteps());
+
+  useEffect(() => {
+    if (activeStep) {
+      setVisited(markStepVisited(activeStep.key));
+    }
+  }, [activeStep]);
+
+  const visitedCount = LEARNING_STEPS.filter((step) => visited.has(step.key)).length;
+  const progressPercent = (visitedCount / LEARNING_STEPS.length) * 100;
+  const nextStep = LEARNING_STEPS.find((step) => !visited.has(step.key));
+  const statusText = activeStep
+    ? `지금 보는 중: ${activeStep.label}`
+    : nextStep
+      ? `다음 추천: ${nextStep.label}`
+      : "모든 단계를 완료했습니다!";
+  const remainingLabel =
+    LEARNING_STEPS.length - visitedCount === 0
+      ? "학습 여정 완료"
+      : `${LEARNING_STEPS.length - visitedCount}개 단계 남음`;
+
   return (
     <aside className="sidebar">
       <Link className="brand" to="/" aria-label="DB Playground 홈">
@@ -63,13 +81,15 @@ export function Sidebar({ activeLabel }: { activeLabel: string }) {
         })}
       </nav>
       <div className="phase-card">
-        <span className="phase-kicker">현재 단계</span>
-        <strong>{PHASE_LABEL}</strong>
-        <p>{CURRENT_PHASE_TITLE}</p>
+        <span className="phase-kicker">학습 진행상황</span>
+        <strong>
+          {visitedCount} / {LEARNING_STEPS.length} 완료
+        </strong>
+        <p>{statusText}</p>
         <div className="phase-progress">
-          <span style={{ width: `${PHASE_PROGRESS_PERCENT}%` }} />
+          <span style={{ width: `${progressPercent}%` }} />
         </div>
-        <small>{PHASE_PROGRESS_LABEL}</small>
+        <small>{remainingLabel}</small>
       </div>
       <div className="sidebar-foot">
         <span className="local-dot" /> localhost 전용

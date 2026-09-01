@@ -80,6 +80,8 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
+        with:
+          version: 11
       - uses: actions/setup-node@v4
         with:
           node-version: "20"
@@ -97,14 +99,24 @@ jobs:
       - name: Write .env for docker compose
         run: |
           cat > .env <<EOF
+          APP_ENV=development
+          APP_HOST=0.0.0.0
+          APP_PORT=8000
+          POSTGRES_HOST=postgres
+          POSTGRES_PORT=5432
           POSTGRES_DB=db_playground
           POSTGRES_USER=db_playground
           POSTGRES_PASSWORD=ci-app-password
           POSTGRES_ADMIN_PASSWORD=ci-admin-password
+          MONGODB_HOST=mongodb
+          MONGODB_PORT=27017
           MONGODB_DATABASE=db_playground
           MONGODB_USERNAME=db_playground
           MONGODB_PASSWORD=ci-app-password
           MONGODB_ADMIN_PASSWORD=ci-admin-password
+          QUERY_TIMEOUT_SECONDS=10
+          QUERY_MAX_ROWS=500
+          DOCUMENT_QUERY_MAX_RESULTS=500
           FRONTEND_ORIGIN=http://localhost:5173
           VITE_API_URL=http://localhost:8000
           EOF
@@ -130,7 +142,11 @@ jobs:
           [ "$result" = "f" ]
       - name: Regression-check the SQL console still rejects DDL
         run: |
-          curl -fsS -X POST http://localhost:8000/api/postgres/query \
+          # No -f here: a 400 is the expected, correct response, and -f/--fail
+          # discards the response body on any HTTP error status -- which would
+          # leave ddl-response.json empty and fail the next line for the wrong
+          # reason (missing body, not a wrong body).
+          curl -sS -X POST http://localhost:8000/api/postgres/query \
             -H "Content-Type: application/json" \
             -d '{"sql": "DROP TABLE customers"}' -o /tmp/ddl-response.json -w "%{http_code}" | grep -q 400
           grep -q "Alembic" /tmp/ddl-response.json
