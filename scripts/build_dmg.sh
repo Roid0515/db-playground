@@ -18,7 +18,7 @@ DIST_DIR="$ROOT_DIR/dist"
 APP_NAME="DB Playground"
 APP_BUNDLE="$DIST_DIR/$APP_NAME.app"
 BUNDLE_ID="com.shinhh95.dbplayground"
-APP_VERSION="1.1.0"
+APP_VERSION="1.2.0"
 
 POSTGRES_KEG="$(brew --prefix postgresql@16 2>/dev/null || true)"
 MONGOD_KEG="$(brew --prefix mongodb-community@7.0 2>/dev/null || true)"

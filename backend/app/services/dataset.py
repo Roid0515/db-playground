@@ -22,6 +22,7 @@ from sqlalchemy import delete, func, select
 from app.db.mongodb import get_database
 from app.db.postgres import session_scope
 from app.models import Customer, Order, OrderItem, OrderStatus, Product
+from app.services import transaction_lab
 
 LOG = logging.getLogger("db_playground.dataset")
 
@@ -90,7 +91,7 @@ def _build_product_rows(fake: Faker) -> list[dict[str, Any]]:
 
 def _build_order_specs(product_rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
     specs = []
-    for _ in range(ORDER_COUNT):
+    for order_number in range(1, ORDER_COUNT + 1):
         item_count = random.randint(1, min(4, PRODUCT_COUNT))
         product_indexes = random.sample(range(PRODUCT_COUNT), k=item_count)
         items = [
@@ -103,6 +104,10 @@ def _build_order_specs(product_rows: list[dict[str, Any]]) -> list[dict[str, Any
         ]
         specs.append(
             {
+                # Postgres uses an integer id and MongoDB an ObjectId, so this
+                # seeded 1..N number is the only shared key identifying "the
+                # same order" across both stores -- see comparison.py.
+                "order_number": order_number,
                 "customer_index": random.randrange(CUSTOMER_COUNT),
                 "status": random.choice(list(OrderStatus)),
                 "items": items,
@@ -133,7 +138,11 @@ def _seed_postgres(
         session.flush()  # assign primary keys before orders reference them
 
         for spec in order_specs:
-            order = Order(customer_id=customers[spec["customer_index"]].id, status=spec["status"])
+            order = Order(
+                order_number=spec["order_number"],
+                customer_id=customers[spec["customer_index"]].id,
+                status=spec["status"],
+            )
             for item in spec["items"]:
                 order.items.append(
                     OrderItem(
@@ -165,6 +174,7 @@ def _seed_mongodb(
 
     order_docs = [
         {
+            "order_number": spec["order_number"],
             "customer_id": customer_ids[spec["customer_index"]],
             "status": spec["status"].value,
             "created_at": now,
@@ -210,6 +220,10 @@ def _mongodb_status() -> StoreCounts:
 
 
 def generate_dataset() -> dict[str, StoreResult]:
+    # An open transaction-lab sandbox session holding row locks on these same
+    # tables would otherwise block -- or deadlock -- the reseed below.
+    transaction_lab.close_all_sessions()
+
     Faker.seed(SEED)
     random.seed(SEED)
     fake = Faker()
@@ -230,6 +244,8 @@ def generate_dataset() -> dict[str, StoreResult]:
 
 
 def reset_dataset() -> dict[str, StoreResult]:
+    transaction_lab.close_all_sessions()
+
     def reset_postgres() -> StoreCounts:
         with session_scope() as session:
             _clear_postgres(session)

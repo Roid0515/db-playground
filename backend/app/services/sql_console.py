@@ -21,7 +21,12 @@ from app.config import get_settings
 from app.db.postgres import get_engine, session_scope
 
 _ALLOWED_LEADING_KEYWORDS = {"SELECT", "INSERT", "UPDATE", "DELETE", "WITH"}
-_EXCLUDED_TABLES = {"alembic_version"}
+# alembic_version is Alembic's own bookkeeping table; index_lab_events is a
+# 100k-row bulk table that exists only for Phase 6's index lab (see
+# app/services/index_lab.py) -- neither is part of the shopping-mall dataset
+# this Table Explorer is meant to showcase, so both would just be confusing
+# noise here.
+_EXCLUDED_TABLES = {"alembic_version", "index_lab_events"}
 
 
 class SqlConsoleError(ValueError):

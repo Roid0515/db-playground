@@ -2,10 +2,10 @@
  * sidebar, dashboard, and every page's footer -- previously each of those
  * had its own copy of "Phase 03" / "3 / 7 단계" / etc, which drift the
  * moment one gets updated and the others don't. */
-export const CURRENT_PHASE_NUMBER = 3;
+export const CURRENT_PHASE_NUMBER = 7;
 export const TOTAL_PHASES = 7;
-export const CURRENT_PHASE_TITLE = "관계형 DB 실습";
-export const CURRENT_PHASE_TITLE_EN = "Relational Practice";
+export const CURRENT_PHASE_TITLE = "학습 노트";
+export const CURRENT_PHASE_TITLE_EN = "Reference Notes";
 
 const paddedNumber = String(CURRENT_PHASE_NUMBER).padStart(2, "0");
 

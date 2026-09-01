@@ -7,16 +7,20 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
+from app.api.comparison import router as comparison_router
 from app.api.dataset import router as dataset_router
 from app.api.health import router as health_router
+from app.api.index_lab import router as index_lab_router
+from app.api.mongodb import router as mongodb_router
 from app.api.postgres import router as postgres_router
+from app.api.transaction_lab import router as transaction_lab_router
 from app.config import get_settings
 
 settings = get_settings()
 app = FastAPI(
     title="DB Playground API",
     description="Local learning API for PostgreSQL and MongoDB",
-    version="1.1.0",
+    version="1.2.0",
 )
 app.add_middleware(
     CORSMiddleware,
@@ -28,6 +32,10 @@ app.add_middleware(
 app.include_router(health_router)
 app.include_router(dataset_router)
 app.include_router(postgres_router)
+app.include_router(mongodb_router)
+app.include_router(comparison_router)
+app.include_router(index_lab_router)
+app.include_router(transaction_lab_router)
 
 
 @app.exception_handler(RequestValidationError)

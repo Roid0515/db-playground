@@ -1,23 +1,12 @@
 import { useQuery } from "@tanstack/react-query";
-import { ArrowUpRight, CircleCheck, Database, LockKeyhole, RefreshCw, Server, Timer } from "lucide-react";
+import { ArrowUpRight, CircleCheck, Database, RefreshCw, Server, Timer } from "lucide-react";
 import { Link } from "react-router-dom";
 import { Sidebar } from "../../components/Sidebar";
 import { apiUrl } from "../../api/client";
 import { fetchSystemHealth, ServiceHealth } from "../../api/health";
 import { DB_META, DbType } from "../../config/dbMeta";
-import {
-  CURRENT_PHASE_TITLE,
-  PHASE_FOOTER_LABEL,
-  PHASE_LABEL,
-  PHASE_SCOPE_NOTE,
-} from "../../config/phase";
+import { CURRENT_PHASE_TITLE, PHASE_FOOTER_LABEL, PHASE_LABEL } from "../../config/phase";
 import { DatasetPanel } from "../dataset/DatasetPanel";
-
-const nextSteps = [
-  { number: "04", title: "MongoDB 실습", copy: "문서 구조와 필터, 집계 파이프라인을 익힙니다." },
-  { number: "05", title: "구조 비교", copy: "같은 데이터를 두 구조로 나란히 놓고 차이를 짚어봅니다." },
-  { number: "06", title: "트랜잭션 · 인덱스", copy: "동시성과 조회 성능을 실습으로 이해합니다." },
-];
 
 function formatTime(value?: string) {
   if (!value) return "확인 중";
@@ -132,30 +121,24 @@ export function Dashboard() {
             <div>
               <p className="section-kicker">{PHASE_LABEL}</p>
               <h2>{CURRENT_PHASE_TITLE}</h2>
-              <span>방금 생성한 샘플 데이터를 테이블별로 살펴보고, SQL을 직접 실행해보세요.</span>
+              <span>지금까지 실습한 핵심 개념을 학습 노트에서 정리해보세요.</span>
             </div>
-            <Link className="cta-link" to="/relational">
-              테이블 탐색하기 <ArrowUpRight size={15} />
+            <Link className="cta-link" to="/notes">
+              학습 노트 보기 <ArrowUpRight size={15} />
             </Link>
           </section>
 
-          <section className="roadmap" aria-labelledby="roadmap-title">
-            <div className="section-title-row">
-              <div>
-                <p className="section-kicker">Coming next</p>
-                <h2 id="roadmap-title">다음 학습 단계</h2>
-              </div>
-              <span className="scope-note">{PHASE_SCOPE_NOTE}</span>
+          <section className="ready-panel">
+            <div className="ready-icon">
+              <CircleCheck size={24} />
             </div>
-            <div className="roadmap-grid">
-              {nextSteps.map((step) => (
-                <article key={step.number}>
-                  <span className="step-number">{step.number}</span>
-                  <LockKeyhole size={16} />
-                  <h3>{step.title}</h3>
-                  <p>{step.copy}</p>
-                </article>
-              ))}
+            <div>
+              <p>All phases complete</p>
+              <h2>7단계 학습을 모두 마쳤습니다.</h2>
+              <span>
+                관계형 DB 실습, MongoDB 실습, 구조 비교, 트랜잭션·인덱스까지 모두
+                둘러봤습니다. 사이드바에서 언제든 다시 돌아가 실습할 수 있습니다.
+              </span>
             </div>
           </section>
         </div>

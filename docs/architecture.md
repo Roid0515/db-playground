@@ -15,7 +15,17 @@ Browser :5173
        ├─ POST /api/dataset/reset    → FastAPI :8000  (same lock)
        ├─ GET  /api/postgres/tables            → FastAPI :8000 → inspect(engine) + COUNT(*) → PostgreSQL
        ├─ GET  /api/postgres/tables/{t}/rows   → FastAPI :8000 → SELECT ... LIMIT/OFFSET     → PostgreSQL
-       └─ POST /api/postgres/query             → FastAPI :8000 → exec_driver_sql(sql), statement_timeout set → PostgreSQL
+       ├─ POST /api/postgres/query             → FastAPI :8000 → exec_driver_sql(sql), statement_timeout set → PostgreSQL
+       ├─ GET  /api/mongodb/collections            → FastAPI :8000 → list_collection_names() + count_documents → MongoDB
+       ├─ GET  /api/mongodb/collections/{c}/documents → FastAPI :8000 → find().skip().limit() → MongoDB
+       ├─ POST /api/mongodb/query              → FastAPI :8000 → constrained mongosh-syntax parser → MongoDB
+       ├─ GET  /api/comparison/orders           → FastAPI :8000 → PostgreSQL (order summaries)
+       ├─ GET  /api/comparison/orders/{n}       → FastAPI :8000 → PostgreSQL join + MongoDB find_one, matched by order_number
+       ├─ GET  /api/index-lab/status            → FastAPI :8000 → pg_indexes lookup → PostgreSQL
+       ├─ POST /api/index-lab/explain           → FastAPI :8000 → EXPLAIN (ANALYZE, FORMAT JSON) → PostgreSQL
+       ├─ POST /api/index-lab/{create,drop}-index → FastAPI :8000 → CREATE/DROP INDEX (one hardcoded index) → PostgreSQL
+       └─ POST /api/transaction-lab/{begin,execute,peek,commit,rollback} → FastAPI :8000
+                                        → a held-open psycopg connection per session_id → PostgreSQL
 ```
 
 ## Decisions (Phase 1)
@@ -41,6 +51,31 @@ Browser :5173
 - **Writes invalidate broadly:** a successful query invalidates the table list, row browser, and dashboard dataset-status React Query caches together, so effects of a learner's own INSERT/UPDATE/DELETE show up everywhere immediately.
 - **Phase boundary:** MongoDB browsing/querying, schema diagrams, comparison lessons, transactions, and indexes are deferred until the phase that uses them.
 
+## Decisions (Phase 4)
+
+- **An operation allowlist instead of trying to parse JavaScript:** `app/services/mongo_console.py` accepts only `db.<collection>.<op>(<args>)` with `<op>` in a fixed set (find/aggregate/countDocuments/insert*/update*/delete*) and `<args>` as strict JSON -- see `docs/phase-4.md` for why a real mongosh grammar wasn't worth building.
+- **Documents render as JSON, not table rows:** unlike Phase 3's `ResultsTable`, MongoDB's schema-flexible documents are shown as formatted JSON cards, since a fixed set of table columns would misrepresent the whole point of a document store.
+- **BSON serialization is shared, not duplicated:** `app/services/bson_utils.to_jsonable` converts `ObjectId`/`datetime` to JSON-safe values; both the Mongo console and Phase 5's comparison view use it.
+- **Phase boundary:** structure comparison, transactions, and indexes are deferred until the phase that uses them.
+
+## Decisions (Phase 5)
+
+- **A shared `order_number`, not positional matching:** PostgreSQL's `orders.id` and MongoDB's `orders._id` have no natural correspondence, so `dataset.py` seeds an explicit, identical `order_number` (1..N) into both stores at generation time. `app/services/comparison.py` looks each side up independently by that number -- see `docs/phase-5.md` for the real bug this avoids.
+- **The relational pane shows its own SQL**, not just the joined result, since the join itself (not just its output) is what Phase 3 already taught and this phase is reinforcing by contrast.
+- **Phase boundary:** transactions and indexes are deferred until Phase 6.
+
+## Decisions (Phase 6)
+
+- **The index lab runs against a dedicated 100k-row table, not the shopping-mall dataset.** Verified directly: creating an index on the 40-row `orders` table never changed PostgreSQL's query plan -- a sequential scan over 40 rows is genuinely cheaper than an index lookup, so the demo would be a no-op. `index_lab_events` (`app/models/index_lab_event.py`) is lazily bulk-seeded (a single server-side `INSERT ... SELECT ... generate_series(...)`, not a Python loop) the first time the lab loads, and is excluded from Phase 3's Table Explorer since it isn't part of the narrative dataset.
+- **Only one specific, hardcoded index is ever created or dropped** by the index lab -- a curated teaching action, not a general DDL passthrough; the SQL console still blocks all DDL everywhere else.
+- **The transaction lab holds a real connection open per session**, keyed by an opaque `session_id` the frontend carries between requests, because an open SQL transaction is fundamentally tied to one physical connection and there's no way around that for a genuine `BEGIN`/`COMMIT`/`ROLLBACK` demo. An in-process dict is sufficient (single-learner local app, no multi-process deployment).
+- **Dataset generate/reset force-closes every open transaction-lab session first**, rolling each back, so an abandoned open transaction can't block or deadlock the reset's deletes.
+- **Phase boundary:** none remaining in this work order -- see Phase 7 for the closing reference notes.
+
+## Decisions (Phase 7)
+
+- **No backend at all.** The learning notes are static content that doesn't depend on the current dataset; adding an endpoint just to serve hardcoded strings the frontend could hold directly would be pure overhead.
+
 ## Decisions (Hardening)
 
 A security/reliability pass followed Phase 3, deliberately without adding new learning features (existing UI and both run modes were preserved). See `AGENTS.md`'s "Security and reliability" section for the day-to-day rules this leaves behind; the reasoning:
@@ -65,3 +100,19 @@ A security/reliability pass followed Phase 3, deliberately without adding new le
 ## Postgres console contract
 
 `GET /api/postgres/tables` returns each table's name, row count, and columns (name + type). `GET /api/postgres/tables/{table}/rows` returns a page of rows as `{columns, rows, total, page, page_size}`, capped by `QUERY_MAX_ROWS`. `POST /api/postgres/query` takes `{"sql": "..."}`, applies a `statement_timeout` of `QUERY_TIMEOUT_SECONDS`, and returns `{columns, rows, row_count, truncated, duration_ms, statement_type}` -- `columns`/`rows` are `null` for INSERT/UPDATE/DELETE, where `row_count` is rows affected rather than rows returned. A rejected statement (wrong type, multiple statements, a timeout, or a real SQL error) comes back as an HTTP 400 with a `detail` message meant to be shown directly to the learner.
+
+## Mongo console contract
+
+`GET /api/mongodb/collections` returns each collection's name, document count, and `sample_fields` (one sample document's top-level keys). `GET /api/mongodb/collections/{name}/documents` returns `{documents, total, page, page_size}`, capped by `DOCUMENT_QUERY_MAX_RESULTS`. `POST /api/mongodb/query` takes `{"command": "db.<collection>.<op>(<args>)"}` and returns `{documents, row_count, truncated, duration_ms, operation}` -- `documents` is `null` for insert/update/delete operations, where `row_count` is the affected/inserted count. A rejected command (unrecognized syntax, an operation outside the allowlist, invalid JSON, or a real MongoDB error) comes back as an HTTP 400 with a `detail` message.
+
+## Comparison contract
+
+`GET /api/comparison/orders` returns every order as `{order_number, customer_name, status, item_count, total_cents}`, ordered by `order_number`. `GET /api/comparison/orders/{order_number}` returns `{order_number, relational, document}`, where `relational` is `{order, customer, items, sql}` (the actual SQL that produced it) and `document` is `{document}` (the raw MongoDB order document, BSON-serialized). A 404 names which store the order is missing from.
+
+## Index lab contract
+
+`GET /api/index-lab/status` returns `{table, column, index_name, index_exists, row_count}` for the fixed demo table/index, lazily seeding the practice table on first call if it's empty. `POST /api/index-lab/explain` runs the demo query and returns `{node_type, used_index, execution_time_ms, planning_time_ms, row_count, plan_text}` -- `used_index` is derived by walking the JSON plan tree for any node whose type contains "Index". `POST /api/index-lab/create-index` / `drop-index` return the same status shape after creating or dropping the one hardcoded demo index.
+
+## Transaction lab contract
+
+`POST /api/transaction-lab/begin` opens a new sandboxed connection and returns `{session_id}`. `POST /api/transaction-lab/execute` takes `{session_id, sql}` (one SELECT/INSERT/UPDATE/DELETE statement, same validation as the Postgres console) and returns `{columns, rows, row_count}`. `POST /api/transaction-lab/peek` (same session) and `GET /api/transaction-lab/peek-committed` (a fresh, separate connection) both run the same fixed representative query and return the same shape, so the frontend can show them side by side. `POST /api/transaction-lab/commit` / `rollback` take `{session_id}`, close that session, and return `{status}`. An unknown or expired `session_id` on any of these comes back as an HTTP 400.

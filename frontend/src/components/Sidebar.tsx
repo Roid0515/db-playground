@@ -1,4 +1,12 @@
-import { BookOpen, Boxes, Database, GitCompareArrows, LayoutDashboard, LockKeyhole } from "lucide-react";
+import {
+  BookOpen,
+  Boxes,
+  Database,
+  GitCompareArrows,
+  LayoutDashboard,
+  LockKeyhole,
+  Zap,
+} from "lucide-react";
 import { Link } from "react-router-dom";
 import {
   CURRENT_PHASE_TITLE,
@@ -16,9 +24,10 @@ interface NavItem {
 const navItems: NavItem[] = [
   { label: "대시보드", icon: LayoutDashboard, href: "/" },
   { label: "관계형 DB", icon: Database, href: "/relational" },
-  { label: "MongoDB", icon: Boxes },
-  { label: "구조 비교", icon: GitCompareArrows },
-  { label: "학습 노트", icon: BookOpen },
+  { label: "MongoDB", icon: Boxes, href: "/mongodb" },
+  { label: "구조 비교", icon: GitCompareArrows, href: "/comparison" },
+  { label: "트랜잭션 · 인덱스", icon: Zap, href: "/performance" },
+  { label: "학습 노트", icon: BookOpen, href: "/notes" },
 ];
 
 export function Sidebar({ activeLabel }: { activeLabel: string }) {

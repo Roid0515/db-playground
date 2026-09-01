@@ -18,14 +18,23 @@ DB Playground.app (SwiftUI, WKWebView)
 
 - The Swift launcher (`desktop/DBPlaygroundApp`) starts the backend as a child
   process, polls `/api/health/ready` until it's up, then loads the dashboard
-  directly in an in-app `WKWebView`. Quitting the app sends `SIGTERM` to the
-  backend, which stops postgres/mongod before exiting (see
-  [`app/desktop/runtime.py`](../backend/app/desktop/runtime.py)). If the
-  backend is ever killed outright instead (a crash, not a normal quit), the
-  launcher detects that its child died unexpectedly and falls back to
-  signaling the whole process group -- `runtime.main()` calls `os.setpgrp()`
-  specifically so postgres/mongod are still reachable that way even after
-  their own parent is gone. See [`BackendRuntime.swift`](../desktop/DBPlaygroundApp/Sources/DBPlaygroundApp/BackendRuntime.swift).
+  directly in an in-app `WKWebView`. Both quitting the app normally and the
+  backend crashing unexpectedly are handled the same way: the launcher signals
+  the whole process group with `SIGTERM` (then `SIGKILL` after a 2-second
+  grace period for anything still alive) -- `runtime.main()` calls
+  `os.setpgrp()` specifically so postgres/mongod are reachable that way even
+  after their own parent is gone. See
+  [`BackendRuntime.swift`](../desktop/DBPlaygroundApp/Sources/DBPlaygroundApp/BackendRuntime.swift).
+  This isn't the belt-and-suspenders option it looks like: `app.desktop.runtime.main()`
+  also has a `try/finally` around `uvicorn.run()` meant to stop postgres/mongod
+  gracefully on a plain `SIGTERM` to just the backend process, but uvicorn's own
+  graceful-shutdown path re-raises that signal with Python's *original* (default)
+  handler restored once it's done -- which kills the process via the OS default
+  disposition and never reaches the `finally` block. Verified directly: a
+  `SIGTERM` sent to only the backend process left postgres/mongod running as
+  orphans every time. Signaling the whole group sidesteps this because postgres
+  and mongod each treat a direct `SIGTERM` as their own clean shutdown signal,
+  so it's independent of whether the backend's own Python code ever runs.
 - PostgreSQL and MongoDB binaries are copied from Homebrew at build time and
   re-linked with [`dylibbundler`](https://github.com/auburnsounds/dylibbundler)
   so they carry their own dependency dylibs instead of pointing at
@@ -83,8 +92,9 @@ signs (ad hoc) the `.app` before creating the `.dmg`.
 - **Fixed ports** (8765 / 55432 / 57017, no negotiation). If something else
   on the machine already holds one of these, the app will fail to start;
   there's no conflict UI yet.
-- **Crash cleanup has a short blind spot.** The process-group fallback described
+- **Shutdown has a short blind spot.** The process-group signal described
   above sends `SIGTERM` first and only escalates to `SIGKILL` after a 2-second
   grace period, so if postgres/mongod are themselves wedged (not just the
-  backend), there's a brief window after a crash where they're still exiting.
-  In every case tested so far they've stopped well within that window.
+  backend), there's a brief window -- on a crash or a normal quit alike --
+  where they're still exiting. In every case tested so far they've stopped
+  well within that window.

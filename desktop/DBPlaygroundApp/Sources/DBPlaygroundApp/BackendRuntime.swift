@@ -91,7 +91,18 @@ final class BackendRuntime: ObservableObject {
         isStoppingIntentionally = true
         pollTask?.cancel()
         guard let process, process.isRunning else { return }
-        process.terminate()
+        // A plain process.terminate() (SIGTERM to just the backend process) looks
+        // like the graceful path, but isn't: uvicorn's own signal handling shuts
+        // the app down cleanly and then re-raises SIGTERM with Python's *original*
+        // (default) handler restored, which kills the process via the OS default
+        // disposition -- skipping every `finally` below `uvicorn.run()`, including
+        // the one that stops postgres/mongod. Verified directly: a backend quit
+        // this way left both running as orphans every time. Signaling the whole
+        // process group instead sidesteps that -- postgres and mongod each treat
+        // a direct SIGTERM as their own clean shutdown signal, so this is no less
+        // graceful, it just doesn't depend on Python code that turns out to never
+        // run.
+        Self.killProcessGroup(of: process.processIdentifier)
         process.waitUntilExit()
     }
 
@@ -99,7 +110,9 @@ final class BackendRuntime: ObservableObject {
     /// its process group id -- postgres/mongod inherit that group, and it stays
     /// addressable via kill(-pgid, ...) even after the leader itself has died.
     /// SIGTERM first for a clean shutdown attempt, SIGKILL shortly after for
-    /// whatever ignores it.
+    /// whatever ignores it. Used for both an intentional stop() and an
+    /// unexpected exit -- see stop()'s comment for why intentional shutdown
+    /// needs this too, not just the crash case.
     private static func killProcessGroup(of pid: pid_t) {
         Darwin.kill(-pid, SIGTERM)
         DispatchQueue.global().asyncAfter(deadline: .now() + 2) {
